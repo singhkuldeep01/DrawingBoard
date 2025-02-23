@@ -1,109 +1,125 @@
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-let path = []; // Stores drawing actions
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const pencilBtn = document.getElementById("pencil");
+const eraserBtn = document.getElementById("eraser");
+const clearBtn = document.getElementById("clear");
+const undoBtn = document.getElementById("undo");
+const redoBtn = document.getElementById("redo");
+const colorPicker = document.getElementById("color-picker");
+const brushSize = document.getElementById("brush-size");
+
 let isDrawing = false;
-let redoStack = []; // Stores redo actions
+let lastX = 0, lastY = 0;
+let brushColor = "#000000";
+let brushWidth = 5;
+let isErasing = false;
 
-let currentColor = 'black';
-let currentTool = 'pencil';
-let brushSize = 5;
+let paths = [];      // Stores all drawn strokes
+let redoStack = [];  // Stores undone strokes
 
-function setupCanvas() {
-    const rect = canvas.getBoundingClientRect();
-    const dpi = window.devicePixelRatio;
-    canvas.width = rect.width * dpi;
-    canvas.height = rect.height * dpi;
-    ctx.scale(dpi, dpi);
-}
+// Set canvas size
+canvas.width = 2000;
+canvas.height = 1200;
+ctx.lineCap = "round";
+ctx.lineJoin = "round";
 
-document.addEventListener('DOMContentLoaded', () => {
-    setupCanvas();
-    document.querySelector('#pencil').addEventListener('click', () => setActiveTool('pencil'));
-    document.querySelector('#eraser').addEventListener('click', () => setActiveTool('eraser'));
-    document.querySelector('#undo').addEventListener('click', undoLastAction);
-    document.querySelector('#redo').addEventListener('click', redoLastAction);
-    document.querySelector('#clear').addEventListener('click', clearCanvas);
-    document.querySelector('#color-picker').addEventListener('change', (e) => currentColor = e.target.value);
-    document.querySelector('#brush-size').addEventListener('change', (e) => brushSize = parseInt(e.target.value));
-
-    canvas.addEventListener('mousedown', startDrawing);
-    canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('mouseup', stopDrawing);
-    canvas.addEventListener('mouseleave', stopDrawing);
-
-    setActiveTool('pencil');
-});
-
-function draw(e) {
-    if (!isDrawing) return;
-    const mousePosition = getMousePosition(e);
-    path[path.length - 1].points.push(mousePosition);
-    drawPath();
-}
-
-function drawPath() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    path.forEach(p => {
-        ctx.beginPath();
-        ctx.moveTo(p.points[0].x, p.points[0].y);
-        p.points.forEach(point => ctx.lineTo(point.x, point.y));
-        ctx.strokeStyle = (p.tool === 'eraser') ? 'white' : p.color;
-        ctx.lineWidth = p.size;
-        ctx.lineCap = 'round';
-        ctx.stroke();
-    });
-}
-
-function undoLastAction() {
-    if (path.length > 0) {
-        redoStack.push(path.pop());
-        drawPath();
-    }
-}
-
-function redoLastAction() {
-    if (redoStack.length > 0) {
-        path.push(redoStack.pop());
-        drawPath();
-    }
-}
-
+// Start Drawing
 function startDrawing(e) {
     isDrawing = true;
-    const mousePosition = getMousePosition(e);
-    path.push({
-        color: currentColor,
-        tool: currentTool,
-        size: brushSize,
-        points: [mousePosition]
+    lastX = e.offsetX;
+    lastY = e.offsetY;
+    
+    // Create new stroke
+    paths.push({
+        points: [{ x: lastX, y: lastY }],
+        color: isErasing ? "#ffffff" : brushColor,
+        width: brushWidth
     });
-    redoStack = [];
+
+    redoStack = []; // Clear redo stack on new draw
 }
 
-function getMousePosition(e) {
-    const rect = canvas.getBoundingClientRect();
-    return {
-        x: (e.clientX - rect.left),
-        y: (e.clientY - rect.top)
-    };
+// Draw Line
+function draw(e) {
+    if (!isDrawing) return;
+    
+    let currentPath = paths[paths.length - 1];  // Get current stroke
+    let newPoint = { x: e.offsetX, y: e.offsetY };
+    currentPath.points.push(newPoint);
+
+    redrawCanvas(); // Redraw everything
 }
 
+// Stop Drawing
 function stopDrawing() {
     isDrawing = false;
 }
 
-function clearCanvas() {
+// Redraw Canvas
+function redrawCanvas() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    path = [];
-    redoStack = [];
+    
+    paths.forEach(path => {
+        ctx.strokeStyle = path.color;
+        ctx.lineWidth = path.width;
+        ctx.beginPath();
+        
+        path.points.forEach((point, index) => {
+            if (index === 0) {
+                ctx.moveTo(point.x, point.y);
+            } else {
+                ctx.lineTo(point.x, point.y);
+            }
+        });
+        
+        ctx.stroke();
+    });
 }
 
-function setActiveTool(tool) {
-    currentTool = tool;
-    document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
-    let selectedTool = document.querySelector('#' + tool);
-    if (selectedTool) {
-        selectedTool.classList.add('active');
+// Undo
+undoBtn.addEventListener("click", () => {
+    if (paths.length > 0) {
+        redoStack.push(paths.pop()); // Move last stroke to redo stack
+        redrawCanvas();
     }
-    canvas.style.cursor = currentTool === 'pencil' ? 'crosshair' : 'cell';
-}
+});
+
+// Redo
+redoBtn.addEventListener("click", () => {
+    if (redoStack.length > 0) {
+        paths.push(redoStack.pop()); // Move last undone stroke back to paths
+        redrawCanvas();
+    }
+});
+
+// Clear Canvas
+clearBtn.addEventListener("click", () => {
+    paths = [];
+    redoStack = [];
+    redrawCanvas();
+});
+
+// Change Brush Color
+colorPicker.addEventListener("input", (e) => {
+    brushColor = e.target.value;
+});
+
+// Change Brush Size
+brushSize.addEventListener("input", (e) => {
+    brushWidth = e.target.value;
+});
+
+// Activate Pencil
+pencilBtn.addEventListener("click", () => {
+    isErasing = false;
+});
+
+// Activate Eraser
+eraserBtn.addEventListener("click", () => {
+    isErasing = true;
+});
+
+// Attach Event Listeners
+canvas.addEventListener("mousedown", startDrawing);
+canvas.addEventListener("mousemove", draw);
+canvas.addEventListener("mouseup", stopDrawing);
